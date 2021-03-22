@@ -3,6 +3,7 @@ import { parseUtterance } from 'common/utterance-parser'
 import _ from 'lodash'
 
 import { POSClass } from '../language/pos-tagger'
+import { SpellChecker } from '../language/spell-checker'
 import { computeNorm, scalarDivide, scalarMultiply, vectorAdd, zeroes } from '../tools/math'
 import { replaceConsecutiveSpaces, replaceEllipsis } from '../tools/strings'
 import { convertToRealSpaces, isSpace, isWord, SPACE } from '../tools/token-utils'
@@ -53,8 +54,10 @@ export default class Utterance {
   public entities: ReadonlyArray<UtteranceEntity> = []
   private _tokens: ReadonlyArray<UtteranceToken> = []
   private _globalTfidf?: TFIDF
+  private _globalVectors?: Dic<number[]>
   private _kmeans?: sdk.MLToolkit.KMeans.KmeansResult
   private _sentenceEmbedding?: number[]
+  private _spellChecked?: Utterance
 
   constructor(tokens: string[], vectors: number[][], posTags: POSClass[], public languageCode: Readonly<string>) {
     const allSameLength = [tokens, vectors, posTags].every(arr => arr.length === tokens.length)
@@ -164,6 +167,10 @@ export default class Utterance {
     this._globalTfidf = _.mapKeys(tfidf, (tfidf, token) => token.toLowerCase())
   }
 
+  setGlobalVectors(vectors: Dic<number[]>) {
+    this._globalVectors = vectors
+  }
+
   setKmeans(kmeans?: sdk.MLToolkit.KMeans.KmeansResult) {
     this._kmeans = kmeans
   }
@@ -223,6 +230,23 @@ export default class Utterance {
     }
 
     return utterance
+  }
+
+  get spellChecked() {
+    if (this._spellChecked) {
+      return this._spellChecked
+    }
+
+    if (!this._globalVectors) {
+      throw new Error('Global vectors where not set.')
+    }
+
+    const spellChecker = new SpellChecker(this._globalVectors)
+    const spellChecked = spellChecker.predict(this) ?? this.clone(false, false)
+    this._spellChecked = spellChecked
+    this.entities.forEach(entity => spellChecked.tagEntity(entity, entity.startPos, entity.endPos))
+    this.slots.forEach(slot => spellChecked.tagSlot(slot, slot.startPos, slot.endPos))
+    return spellChecked
   }
 
   private _validateRange(start: number, end: number) {

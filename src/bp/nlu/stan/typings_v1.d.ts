@@ -83,7 +83,6 @@ export interface IntentPrediction {
   name: string
   confidence: number
   slots: SlotPrediction[]
-  extractor: string
 }
 
 export interface SlotPrediction {

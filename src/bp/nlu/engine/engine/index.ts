@@ -5,15 +5,24 @@ import LRUCache from 'lru-cache'
 import sizeof from 'object-sizeof'
 import modelIdService from '../model-id-service'
 
-import { TrainingOptions, LanguageConfig, Logger, ModelId, TrainingSet, Model, PredictOutput } from '../typings'
+import {
+  TrainingOptions,
+  LanguageConfig,
+  Logger,
+  ModelId,
+  TrainingSet,
+  Model,
+  PredictOutput,
+  Engine as IEngine
+} from '../typings'
 import { deserializeKmeans } from './clustering'
 import { EntityCacheManager } from './entities/entity-cache-manager'
 import { initializeTools } from './initialize-tools'
 import { getCtxFeatures } from './intents/context-featurizer'
 import { OOSIntentClassifier } from './intents/oos-intent-classfier'
+import { SpellCheckIntentClassifier } from './intents/spellcheck-intent-clf'
 import { SvmIntentClassifier } from './intents/svm-intent-classifier'
 import DetectLanguage from './language/language-identifier'
-import makeSpellChecker from './language/spell-checker'
 import { deserializeModel, PredictableModel, serializeModel } from './model-serializer'
 import { Predict, Predictors } from './predict-pipeline'
 import SlotTagger from './slots/slot-tagger'
@@ -21,7 +30,6 @@ import { isPatternValid } from './tools/patterns-utils'
 import { TrainInput, TrainOutput } from './training-pipeline'
 import { TrainingWorkerQueue } from './training-worker-queue'
 import { EntityCacheDump, ListEntity, PatternEntity, Tools } from './typings'
-import { preprocessRawUtterance } from './utterance/utterance'
 import { getModifiedContexts, mergeModelOutputs } from './warm-training-handler'
 
 const trainDebug = DEBUG('nlu').sub('training')
@@ -47,7 +55,7 @@ interface EngineOptions {
   maxCacheSize: number
 }
 
-export default class Engine implements Engine {
+export default class Engine implements IEngine {
   private _tools!: Tools
   private _trainingWorkerQueue!: TrainingWorkerQueue
 
@@ -251,11 +259,12 @@ export default class Engine implements Engine {
 
     const warmKmeans = kmeans && deserializeKmeans(kmeans)
 
-    const intent_classifier_per_ctx: Dic<OOSIntentClassifier> = await Promise.props(
+    const intent_classifier_per_ctx: Dic<SpellCheckIntentClassifier> = await Promise.props(
       _.mapValues(intent_model_by_ctx, async model => {
-        const intentClf = new OOSIntentClassifier(tools)
-        await intentClf.load(model)
-        return intentClf
+        const oosIntentClf = new OOSIntentClassifier(tools)
+        const spellCheckIntentClf = new SpellCheckIntentClassifier(oosIntentClf)
+        await spellCheckIntentClf.load(model)
+        return spellCheckIntentClf
       })
     )
 
@@ -303,18 +312,6 @@ export default class Engine implements Engine {
       this._tools,
       loaded.predictors
     )
-  }
-
-  async spellCheck(sentence: string, modelId: ModelId) {
-    const stringId = modelIdService.toString(modelId)
-    const loaded = this.modelsById.get(stringId)
-    if (!loaded) {
-      throw new Error(`model ${stringId} not loaded`)
-    }
-
-    const preprocessed = preprocessRawUtterance(sentence)
-    const spellChecker = makeSpellChecker(loaded.predictors.vocab, loaded.model.languageCode, this._tools)
-    return spellChecker(preprocessed)
   }
 
   async detectLanguage(text: string, modelsByLang: _.Dictionary<ModelId>): Promise<string> {

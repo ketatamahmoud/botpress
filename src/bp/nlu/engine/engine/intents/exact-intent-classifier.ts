@@ -38,10 +38,6 @@ export class ExactIntenClassifier implements NoneableIntentClassifier {
 
   private model: Model | undefined
 
-  get name() {
-    return ExactIntenClassifier._name
-  }
-
   async train(trainInput: IntentTrainInput, progress: (p: number) => void) {
     const { intents } = trainInput
     const exact_match_index = this._buildExactMatchIndex(intents)
@@ -97,17 +93,19 @@ export class ExactIntenClassifier implements NoneableIntentClassifier {
     const exactPred = this._findExactIntent(exact_match_index, utterance)
 
     if (exactPred) {
-      const oneHot = intentNames.map(name => ({ name, confidence: name === exactPred ? 1 : 0, extractor: this.name }))
+      const oneHot = intentNames.map(name => ({ name, confidence: name === exactPred ? 1 : 0 }))
       return {
         oos: 0,
-        intents: oneHot
+        intents: oneHot,
+        extractor: ExactIntenClassifier._name
       }
     }
 
-    const zeros = intentNames.map(name => ({ name, confidence: 0, extractor: this.name }))
+    const zeros = intentNames.map(name => ({ name, confidence: 0 }))
     return {
       oos: 1,
-      intents: zeros
+      intents: zeros,
+      extractor: ExactIntenClassifier._name
     }
   }
 

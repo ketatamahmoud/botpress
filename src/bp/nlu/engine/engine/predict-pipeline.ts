@@ -1,10 +1,10 @@
 import { MLToolkit } from 'botpress/sdk'
 import _ from 'lodash'
-import { PredictOutput, Entity, SlotCollection, Predictions } from '../typings'
+import { PredictOutput, Entity, SlotCollection, Predictions, ContextPrediction } from '../typings'
 
 import { extractListEntities, extractPatternEntities } from './entities/custom-entity-extractor'
-import { IntentPredictions, NoneableIntentPredictions } from './intents/intent-classifier'
-import { OOSIntentClassifier } from './intents/oos-intent-classfier'
+import { IntentPredictions, NoneableIntentPredictions, NoneableIntentClassifier } from './intents/intent-classifier'
+import { SpellCheckIntentClassifier } from './intents/spellcheck-intent-clf'
 import { SvmIntentClassifier } from './intents/svm-intent-classifier'
 import SlotTagger from './slots/slot-tagger'
 import {
@@ -22,13 +22,13 @@ import Utterance, { buildUtteranceBatch, preprocessRawUtterance, UtteranceEntity
 export interface Predictors {
   lang: string
   tfidf: TFIDF
-  vocab: string[]
+  vocab: Dic<number[]>
   contexts: string[]
   list_entities: ListEntityModel[] // no need for cache
   pattern_entities: PatternEntity[]
   intents: Intent<string>[]
   ctx_classifier: SvmIntentClassifier
-  intent_classifier_per_ctx: _.Dictionary<OOSIntentClassifier>
+  intent_classifier_per_ctx: _.Dictionary<SpellCheckIntentClassifier>
   slot_tagger_per_intent: _.Dictionary<SlotTagger>
   kmeans?: MLToolkit.KMeans.KmeansResult
 }
@@ -44,7 +44,9 @@ interface InitialStep {
 }
 type PredictStep = InitialStep & { utterance: Utterance }
 type ContextStep = PredictStep & { ctx_predictions: IntentPredictions }
-type IntentStep = ContextStep & { intent_predictions: _.Dictionary<NoneableIntentPredictions> }
+type IntentStep = ContextStep & {
+  intent_predictions: _.Dictionary<NoneableIntentPredictions>
+}
 type SlotStep = IntentStep & { slot_predictions_per_intent: _.Dictionary<SlotExtractionResult[]> }
 
 const NONE_INTENT = 'none'
@@ -74,10 +76,11 @@ async function makePredictionUtterance(input: InitialStep, predictors: Predictor
 
   const text = preprocessRawUtterance(input.rawText.trim())
 
-  const [utterance] = await buildUtteranceBatch(_.uniq([text]), input.languageCode, tools, vocab)
+  const [utterance] = await buildUtteranceBatch(_.uniq([text]), input.languageCode, tools, Object.keys(vocab))
 
   utterance.setGlobalTfidf(tfidf)
   utterance.setKmeans(kmeans)
+  utterance.setGlobalVectors(vocab)
 
   return {
     ...input,
@@ -113,9 +116,10 @@ export async function predictContext(input: PredictStep, predictors: Predictors)
 
 export async function predictIntent(input: ContextStep, predictors: Predictors): Promise<IntentStep> {
   if (_.flatMap(predictors.intents, i => i.utterances).length <= 0) {
-    const nonePrediction = <NoneableIntentPredictions>{
+    const nonePrediction = {
       oos: 1,
-      intents: [{ name: NONE_INTENT, confidence: 1 }]
+      intents: [{ name: NONE_INTENT, confidence: 1, extractor: '' }],
+      extractor: 'none'
     }
     const allCtxs = predictors.contexts
     const intent_predictions = _.zipObject(
@@ -199,24 +203,28 @@ function MapStepToOutput(step: SlotStep): PredictOutput {
     const intentPred = step.intent_predictions[label]
     const intents = !intentPred
       ? []
-      : intentPred.intents.map(({ name, confidence, extractor }) => ({
-          extractor,
+      : intentPred.intents.map(({ name, confidence }) => ({
           label: name,
           confidence,
           slots: (step.slot_predictions_per_intent?.[name] || []).reduce(slotsCollectionReducer, {})
         }))
 
+    const ctxPred: ContextPrediction = {
+      confidence,
+      oos: intentPred?.oos || 0,
+      intents,
+      extractor: intentPred.extractor
+    }
+
     return {
       ...preds,
-      [label]: {
-        confidence,
-        oos: intentPred?.oos || 0,
-        intents
-      }
+      [label]: ctxPred
     }
   }, {})
 
-  return <PredictOutput>{
+  const spellChecked = step.utterance.spellChecked.toString()
+  return {
+    spellChecked,
     entities,
     predictions: _.chain(predictions) // orders all predictions by confidence
       .entries()

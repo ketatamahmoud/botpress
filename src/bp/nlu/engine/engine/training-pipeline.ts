@@ -7,6 +7,7 @@ import { extractListEntitiesWithCache, extractPatternEntities } from './entities
 import { warmEntityCache } from './entities/entity-cache-manager'
 import { getCtxFeatures } from './intents/context-featurizer'
 import { OOSIntentClassifier } from './intents/oos-intent-classfier'
+import { SpellCheckIntentClassifier } from './intents/spellcheck-intent-clf'
 import { SvmIntentClassifier } from './intents/svm-intent-classifier'
 import SlotTagger from './slots/slot-tagger'
 import { replaceConsecutiveSpaces } from './tools/strings'
@@ -59,7 +60,7 @@ export type TrainStep = Readonly<{
 export interface TrainOutput {
   list_entities: ColdListEntityModel[]
   tfidf: TFIDF
-  vocab: string[]
+  vocab: Dic<number[]>
   kmeans: SerializedKmeansResult | undefined
   contexts: string[]
   ctx_model: string
@@ -180,7 +181,9 @@ async function TrainIntentClassifiers(
     const trainableIntents = intents.filter(i => i.contexts.includes(ctx))
 
     const intentClf = new OOSIntentClassifier(tools, tools.logger)
-    await intentClf.train(
+
+    const spellCheckIntentClf = new SpellCheckIntentClassifier(intentClf)
+    await spellCheckIntentClf.train(
       {
         languageCode,
         intents: trainableIntents,
@@ -195,7 +198,7 @@ async function TrainIntentClassifiers(
       }
     )
 
-    const model = intentClf.serialize()
+    const model = spellCheckIntentClf.serialize()
     svmPerCtx[ctx] = model
   }
 
@@ -381,7 +384,7 @@ export const Trainer = async (input: TrainInput, tools: Tools, progress: (x: num
     intent_model_by_ctx,
     slots_model_by_intent,
     contexts: input.contexts,
-    vocab: Object.keys(step.vocabVectors),
+    vocab: step.vocabVectors,
     kmeans: step.kmeans && serializeKmeans(step.kmeans)
   }
 

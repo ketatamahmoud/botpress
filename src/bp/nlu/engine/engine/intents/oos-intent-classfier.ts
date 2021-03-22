@@ -15,7 +15,7 @@ import { getIntentFeatures } from './intent-featurizer'
 import { featurizeInScopeUtterances, featurizeOOSUtterances, getUtteranceFeatures } from './out-of-scope-featurizer'
 import { SvmIntentClassifier } from './svm-intent-classifier'
 
-interface TrainInput extends IntentTrainInput {
+export interface OOSTrainInput extends IntentTrainInput {
   allUtterances: Utterance[]
 }
 
@@ -34,7 +34,7 @@ interface Predictors {
 }
 
 const MIN_NB_UTTERANCES = 3
-const NONE_INTENT = 'none'
+export const NONE_INTENT = 'none'
 const NONE_UTTERANCES_BOUNDS = {
   MIN: 20,
   MAX: 200
@@ -78,7 +78,7 @@ export class OOSIntentClassifier implements NoneableIntentClassifier {
     return OOSIntentClassifier._name
   }
 
-  public async train(trainInput: TrainInput, progress: (p: number) => void): Promise<void> {
+  public async train(trainInput: OOSTrainInput, progress: (p: number) => void): Promise<void> {
     const { languageCode, allUtterances } = trainInput
     const noneIntent = await this._makeNoneIntent(allUtterances, languageCode)
 
@@ -167,7 +167,7 @@ export class OOSIntentClassifier implements NoneableIntentClassifier {
   }
 
   private async _trainOOScopeSvm(
-    trainInput: TrainInput,
+    trainInput: OOSTrainInput,
     noneIntent: Omit<Intent<Utterance>, 'contexts'>,
     progress: (p: number) => void
   ): Promise<string | undefined> {
@@ -204,7 +204,7 @@ export class OOSIntentClassifier implements NoneableIntentClassifier {
   }
 
   private async _trainInScopeSvm(
-    trainInput: TrainInput,
+    trainInput: OOSTrainInput,
     noneIntent: Omit<Intent<Utterance>, 'contexts'>,
     progress: (p: number) => void
   ): Promise<string> {
@@ -292,9 +292,14 @@ export class OOSIntentClassifier implements NoneableIntentClassifier {
 
     const exactPredictions = await exactIntenClassifier.predict(utterance)
 
-    const intentPredictions = exactPredictions.oos
-      ? svmPredictions.intents // no exact match
-      : [...exactPredictions.intents, { name: NONE_INTENT, confidence: 0, extractor: exactIntenClassifier.name }]
+    if (!exactPredictions.oos) {
+      const { extractor, intents, oos } = exactPredictions
+      return {
+        intents: [...intents, { name: NONE_INTENT, confidence: 0 }],
+        extractor,
+        oos
+      }
+    }
 
     let oosPrediction = 0
     if (oosSvm) {
@@ -312,8 +317,9 @@ export class OOSIntentClassifier implements NoneableIntentClassifier {
     // TODO: proceed to election between none intent and oos, remove none intent and make sure confidences sum to 1.
 
     return {
-      intents: intentPredictions,
-      oos: oosPrediction
+      intents: svmPredictions.intents,
+      oos: oosPrediction,
+      extractor: svmPredictions.extractor
     }
   }
 }

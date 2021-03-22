@@ -35,7 +35,6 @@ interface BpIntentPred {
   label: string
   confidence: number
   slots: _.Dictionary<NLUEngine.Slot>
-  extractor: string
 }
 
 export const isListEntity = (e: ListEntityDefinition | PatternEntityDefinition): e is ListEntityDefinition => {
@@ -132,12 +131,11 @@ function mapEntity(entity: NLUEngine.Entity): EntityPrediction {
 }
 
 function mapIntent(intent: BpIntentPred): IntentPrediction {
-  const { confidence, slots, extractor, label } = intent
+  const { confidence, slots, label } = intent
 
   return {
     name: label,
     confidence,
-    extractor,
     slots: Object.values(slots).map(mapOutputSlot)
   }
 }

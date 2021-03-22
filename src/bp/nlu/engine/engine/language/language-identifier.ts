@@ -76,7 +76,7 @@ export default async function(
           tokens: _.orderBy(predictorsByLang[lang].vocab, 'length', 'desc')
         }))
         .map(({ lang, sentence, tokens }) => {
-          for (const token of tokens) {
+          for (const token of Object.keys(tokens)) {
             sentence = sentence.replace(token, '')
           }
           return { lang, confidence: 1 - sentence.length / sentence.length }

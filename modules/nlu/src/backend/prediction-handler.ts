@@ -2,7 +2,6 @@ import * as sdk from 'botpress/sdk'
 import { ModelId, ModelIdService, Engine, Model } from 'common/nlu/engine'
 import _ from 'lodash'
 
-import mergeSpellChecked from './election/spellcheck-handler'
 import ModelService from './model-service'
 
 type WithoutIncludedContexts = Omit<sdk.IO.EventUnderstanding, 'includedContexts'>
@@ -79,33 +78,19 @@ export class PredictionHandler {
       await this.engine.loadModel(model)
     }
 
-    let spellChecked: string | undefined
-    try {
-      spellChecked = await this.engine.spellCheck(textInput, this.modelsByLang[language])
-    } catch (err) {
-      let msg = `An error occured when spell checking input "${textInput}"\n`
-      msg += 'Falling back on original input.'
-      this.logger.attachError(err).error(msg)
-    }
-
     const t0 = Date.now()
     try {
       const originalOutput = await this.engine.predict(textInput, this.modelsByLang[language])
       const ms = Date.now() - t0
 
-      if (spellChecked && spellChecked !== textInput) {
-        const spellCheckedOutput = await this.engine.predict(spellChecked, this.modelsByLang[language])
-        const merged = mergeSpellChecked(originalOutput, spellCheckedOutput)
-        return { ...merged, spellChecked, errored: false, language, ms }
-      }
-      return { ...originalOutput, spellChecked, errored: false, language, ms }
+      return { ...originalOutput, errored: false, language, ms }
     } catch (err) {
       const stringId = this.modelIdService.toString(this.modelsByLang[language])
       const msg = `An error occured when predicting for input "${textInput}" with model ${stringId}`
       this.logger.attachError(err).error(msg)
 
       const ms = Date.now() - t0
-      return { errored: true, spellChecked, language, ms }
+      return { errored: true, language, ms }
     }
   }
 

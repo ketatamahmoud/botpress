@@ -12,17 +12,19 @@ test('remove none intent', () => {
         confidence: 0.5,
         oos: 0.666,
         intents: [
-          { label: 'A', confidence: 0.58, extractor: 'classifier', slots: {} },
-          { label: 'none', confidence: 0.42, extractor: 'classifier', slots: {} }
-        ]
+          { label: 'A', confidence: 0.58, slots: {} },
+          { label: 'none', confidence: 0.42, slots: {} }
+        ],
+        extractor: 'clf'
       },
       someTopic: {
         confidence: 0.5,
         oos: 0.123,
         intents: [
-          { label: 'B', confidence: 0.01, extractor: 'classifier', slots: {} },
-          { label: 'none', confidence: 0.99, extractor: 'classifier', slots: {} }
-        ]
+          { label: 'B', confidence: 0.01, slots: {} },
+          { label: 'none', confidence: 0.99, slots: {} }
+        ],
+        extractor: 'clf'
       }
     },
     detectedLanguage: 'en',
@@ -58,9 +60,10 @@ test('ajdust to 100', () => {
         confidence: 1.0,
         oos: 0.99,
         intents: [
-          { label: 'A', confidence: 0.98, extractor: 'classifier', slots: {} },
-          { label: 'none', confidence: 0.02, extractor: 'classifier', slots: {} }
-        ]
+          { label: 'A', confidence: 0.98, slots: {} },
+          { label: 'none', confidence: 0.02, slots: {} }
+        ],
+        extractor: 'clf'
       }
     },
     detectedLanguage: 'en',

@@ -130,13 +130,15 @@ export class SvmIntentClassifier implements IntentClassifier {
     if (!svm) {
       if (intentNames.length <= 0) {
         return {
-          intents: []
+          intents: [],
+          extractor: SvmIntentClassifier._name
         }
       }
 
       const intent = intentNames[0]
       return {
-        intents: [{ name: intent, confidence: 1, extractor: 'svm-classifier' }]
+        intents: [{ name: intent, confidence: 1 }],
+        extractor: SvmIntentClassifier._name
       }
     }
 
@@ -144,7 +146,8 @@ export class SvmIntentClassifier implements IntentClassifier {
     const preds = await svm.predict(features)
 
     return {
-      intents: preds.map(({ label, confidence }) => ({ name: label, confidence, extractor: 'svm-classifier' }))
+      intents: preds.map(({ label, confidence }) => ({ name: label, confidence })),
+      extractor: SvmIntentClassifier._name
     }
   }
 

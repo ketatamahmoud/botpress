@@ -12,9 +12,9 @@ export interface IntentTrainInput {
 export interface IntentPrediction {
   name: string
   confidence: number
-  extractor: string
 }
 export interface IntentPredictions {
+  extractor: string
   intents: IntentPrediction[]
 }
 export interface NoneableIntentPredictions extends IntentPredictions {
@@ -27,6 +27,6 @@ export interface IntentClassifier {
   load(model: string): Promise<void>
   predict(utterance: Utterance): Promise<IntentPredictions>
 }
-export interface NoneableIntentClassifier {
+export interface NoneableIntentClassifier extends IntentClassifier {
   predict(utterance: Utterance): Promise<NoneableIntentPredictions>
 }
