@@ -5,7 +5,16 @@ import LRUCache from 'lru-cache'
 import sizeof from 'object-sizeof'
 import modelIdService from '../model-id-service'
 
-import { TrainingOptions, LanguageConfig, Logger, ModelId, TrainingSet, Model, PredictOutput } from '../typings'
+import {
+  TrainingOptions,
+  LanguageConfig,
+  Logger,
+  ModelId,
+  TrainingSet,
+  Model,
+  PredictOutput,
+  Engine as IEngine
+} from '../typings'
 import { deserializeKmeans } from './clustering'
 import { EntityCacheManager } from './entities/entity-cache-manager'
 import { initializeTools } from './initialize-tools'
@@ -34,32 +43,56 @@ interface LoadedModel {
   entityCache: EntityCacheManager
 }
 
+const DEFAULT_ENGINE_OPTIONS: EngineOptions = {
+  cacheSize: undefined,
+  legacyElection: false
+}
+const DEFAULT_CACHE_SIZE = Infinity
+
 const DEFAULT_TRAINING_OPTIONS: TrainingOptions = {
   progressCallback: () => {},
   previousModel: undefined
 }
 
-const DEFAULT_ENGINE_OPTIONS: EngineOptions = {
-  maxCacheSize: 262144000 // 250mb of model cache
-}
-
 interface EngineOptions {
-  maxCacheSize: number
+  cacheSize: string | undefined
+  legacyElection: boolean
 }
 
-export default class Engine implements Engine {
+export default class Engine implements IEngine {
   private _tools!: Tools
   private _trainingWorkerQueue!: TrainingWorkerQueue
 
+  private _options: EngineOptions
+
   private modelsById: LRUCache<string, LoadedModel>
 
-  constructor(opt?: Partial<EngineOptions>) {
-    const options: EngineOptions = { ...DEFAULT_ENGINE_OPTIONS, ...opt }
+  constructor(opt: Partial<EngineOptions> = {}) {
+    this._options = { ...DEFAULT_ENGINE_OPTIONS, ...opt }
+
     this.modelsById = new LRUCache({
-      max: options.maxCacheSize,
+      max: this._parseCacheSize(this._options.cacheSize),
       length: sizeof // ignores size of functions, but let's assume it's small
     })
-    trainDebug(`model cache size is: ${bytes(options.maxCacheSize)}`)
+
+    const debugMsg =
+      this.modelsById.max === Infinity
+        ? 'model cache size is infinite'
+        : `model cache size is: ${bytes(this.modelsById.max)}`
+    trainDebug(debugMsg)
+  }
+
+  private _parseCacheSize = (cacheSize: string | undefined): number => {
+    if (!cacheSize) {
+      return DEFAULT_CACHE_SIZE
+    }
+
+    const parsedCacheSize = bytes(cacheSize)
+    if (!parsedCacheSize) {
+      return DEFAULT_CACHE_SIZE
+    }
+
+    return Math.abs(parsedCacheSize)
   }
 
   public getHealth() {
@@ -253,7 +286,8 @@ export default class Engine implements Engine {
 
     const intent_classifier_per_ctx: Dic<OOSIntentClassifier> = await Promise.props(
       _.mapValues(intent_model_by_ctx, async model => {
-        const intentClf = new OOSIntentClassifier(tools)
+        const { legacyElection } = this._options
+        const intentClf = new OOSIntentClassifier(tools, undefined, { legacyElection })
         await intentClf.load(model)
         return intentClf
       })
@@ -303,18 +337,6 @@ export default class Engine implements Engine {
       this._tools,
       loaded.predictors
     )
-  }
-
-  async spellCheck(sentence: string, modelId: ModelId) {
-    const stringId = modelIdService.toString(modelId)
-    const loaded = this.modelsById.get(stringId)
-    if (!loaded) {
-      throw new Error(`model ${stringId} not loaded`)
-    }
-
-    const preprocessed = preprocessRawUtterance(sentence)
-    const spellChecker = makeSpellChecker(loaded.predictors.vocab, loaded.model.languageCode, this._tools)
-    return spellChecker(preprocessed)
   }
 
   async detectLanguage(text: string, modelsByLang: _.Dictionary<ModelId>): Promise<string> {
