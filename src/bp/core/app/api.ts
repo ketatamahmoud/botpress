@@ -56,6 +56,7 @@ const event = (eventEngine: EventEngine, eventRepo: EventRepository): typeof sdk
     registerMiddleware(middleware: sdk.IO.MiddlewareDefinition) {
       eventEngine.register(middleware)
     },
+    sendRemoteCallback: eventEngine.sendRemoteCallback.bind(eventEngine),
     removeMiddleware: eventEngine.removeMiddleware.bind(eventEngine),
     sendEvent: eventEngine.sendEvent.bind(eventEngine),
     replyToEvent: eventEngine.replyToEvent.bind(eventEngine),
